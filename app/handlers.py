@@ -108,7 +108,14 @@ async def cmd_pay(message: Message) -> None:
         return
 
     course, _percent = course_data
-    amount_rub = await add_payment(message.chat.id, amount_usdt, course, username)
+    added_by = None
+    if message.from_user:
+        added_by = (
+            f"@{message.from_user.username}"
+            if message.from_user.username
+            else message.from_user.full_name
+        )
+    amount_rub = await add_payment(message.chat.id, amount_usdt, course, username, added_by)
 
     await message.reply(
         f"Платеж записан: {amount_usdt:.2f} USDT ({format_number(amount_rub)} руб) {username}"
@@ -168,8 +175,15 @@ async def handle_transaction(message: Message) -> None:
         return
 
     course, percent = course_data
+    added_by = None
+    if message.from_user:
+        added_by = (
+            f"@{message.from_user.username}"
+            if message.from_user.username
+            else message.from_user.full_name
+        )
     amount_after_percent, amount_usdt = await add_transaction(
-        message.chat.id, amount_rub, percent, course, username
+        message.chat.id, amount_rub, percent, course, username, added_by
     )
 
     await message.reply(

@@ -2,10 +2,9 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+from config import DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE, DB_PATH, MOSCOW_TZ
 from tortoise import Tortoise, fields
 from tortoise.models import Model
-
-from config import DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE, DB_PATH, MOSCOW_TZ
 
 
 def _now_naive() -> datetime:
@@ -40,6 +39,7 @@ class Transaction(Model):
     course = fields.FloatField()
     amount_usdt = fields.FloatField()
     username = fields.CharField(max_length=255)
+    added_by = fields.CharField(max_length=255, null=True)
 
     class Meta:
         table = "transactions"
@@ -54,6 +54,7 @@ class Payment(Model):
     amount_rub = fields.FloatField()
     course = fields.FloatField()
     username = fields.CharField(max_length=255)
+    added_by = fields.CharField(max_length=255, null=True)
 
     class Meta:
         table = "payments"
@@ -106,9 +107,9 @@ async def set_course(chat_id: int, course: float, percent: int, username: str) -
 
 
 async def get_course(chat_id: int, username: str) -> Optional[tuple[float, int]]:
-    row = await Setting.get_or_none(
-        chat_id=chat_id, username=username.lower()
-    ).only("course", "percent")
+    row = await Setting.get_or_none(chat_id=chat_id, username=username.lower()).only(
+        "course", "percent"
+    )
     return (row.course, row.percent) if row else None
 
 
@@ -118,7 +119,12 @@ async def get_courses(chat_id: int) -> dict[str, tuple[float, int]]:
 
 
 async def add_transaction(
-    chat_id: int, amount_rub: float, percent: int, course: float, username: str
+    chat_id: int,
+    amount_rub: float,
+    percent: int,
+    course: float,
+    username: str,
+    added_by: Optional[str] = None,
 ) -> tuple[float, float]:
     amount_after_percent = amount_rub * (1 - percent / 100)
     amount_usdt = amount_after_percent / course
@@ -131,12 +137,17 @@ async def add_transaction(
         course=course,
         amount_usdt=amount_usdt,
         username=username.lower(),
+        added_by=added_by,
     )
     return amount_after_percent, amount_usdt
 
 
 async def add_payment(
-    chat_id: int, amount_usdt: float, course: float, username: str
+    chat_id: int,
+    amount_usdt: float,
+    course: float,
+    username: str,
+    added_by: Optional[str] = None,
 ) -> float:
     amount_rub = amount_usdt * course
     await Payment.create(
@@ -146,6 +157,7 @@ async def add_payment(
         amount_rub=amount_rub,
         course=course,
         username=username.lower(),
+        added_by=added_by,
     )
     return amount_rub
 
@@ -167,16 +179,22 @@ async def save_daily_message(chat_id: int, message_id: int) -> None:
 
 
 async def get_today_message(chat_id: int) -> Optional[int]:
-    row = await DailyMessage.filter(
-        chat_id=chat_id, date=current_ledger_date()
-    ).only("message_id").order_by("-id").first()
+    row = (
+        await DailyMessage.filter(chat_id=chat_id, date=current_ledger_date())
+        .only("message_id")
+        .order_by("-id")
+        .first()
+    )
     return row.message_id if row else None
 
 
 async def get_last_daily_message_id(chat_id: int) -> Optional[int]:
-    row = await DailyMessage.filter(chat_id=chat_id).only(
-        "message_id"
-    ).order_by("-id").first()
+    row = (
+        await DailyMessage.filter(chat_id=chat_id)
+        .only("message_id")
+        .order_by("-id")
+        .first()
+    )
     return row.message_id if row else None
 
 
@@ -200,21 +218,29 @@ async def clear_daily_history(chat_id: int) -> None:
 async def delete_last_transaction(
     chat_id: int, amount_rub: float, username: str
 ) -> bool:
-    row = await Transaction.filter(
-        chat_id=chat_id, amount_rub=amount_rub, username=username.lower()
-    ).order_by("-id").only("id").first()
+    row = (
+        await Transaction.filter(
+            chat_id=chat_id, amount_rub=amount_rub, username=username.lower()
+        )
+        .order_by("-id")
+        .only("id")
+        .first()
+    )
     if row is None:
         return False
     await row.delete()
     return True
 
 
-async def delete_last_payment(
-    chat_id: int, amount_usdt: float, username: str
-) -> bool:
-    row = await Payment.filter(
-        chat_id=chat_id, amount_usdt=amount_usdt, username=username.lower()
-    ).order_by("-id").only("id").first()
+async def delete_last_payment(chat_id: int, amount_usdt: float, username: str) -> bool:
+    row = (
+        await Payment.filter(
+            chat_id=chat_id, amount_usdt=amount_usdt, username=username.lower()
+        )
+        .order_by("-id")
+        .only("id")
+        .first()
+    )
     if row is None:
         return False
     await row.delete()
