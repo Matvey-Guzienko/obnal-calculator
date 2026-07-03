@@ -1,0 +1,12 @@
+[project]
+name = "calculatoronline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.29.1",
+    "apscheduler>=3.11.3",
+    "pytz>=2026.2",
+    "tortoise-orm>=0.21.0",
+]
