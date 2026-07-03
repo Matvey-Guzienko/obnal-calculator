@@ -1,7 +1,10 @@
+import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BufferedInputFile, InputMediaPhoto
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -17,14 +20,18 @@ from database import (
     save_daily_message,
     set_last_reset_date,
 )
-from report import generate_report
+from report import generate_report_photo
 
 logger = logging.getLogger(__name__)
 
+_refresh_tasks: dict[int, asyncio.Task] = {}
 
-async def send_daily_report(bot: Bot, chat_id: int, report: str | None = None) -> None:
-    if report is None:
-        report = await generate_report(chat_id)
+
+async def send_daily_report(
+    bot: Bot, chat_id: int, media: tuple[bytes, str] | None = None
+) -> None:
+    if media is None:
+        media = await generate_report_photo(chat_id)
 
     old_message_id = await get_last_daily_message_id(chat_id)
     if old_message_id:
@@ -33,7 +40,11 @@ async def send_daily_report(bot: Bot, chat_id: int, report: str | None = None) -
         except Exception:
             pass
 
-    message = await bot.send_message(chat_id=chat_id, text=report)
+    message = await bot.send_photo(
+        chat_id=chat_id,
+        photo=BufferedInputFile(media[0], filename="report.png"),
+        caption=media[1],
+    )
     try:
         await bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
     except Exception:
@@ -56,11 +67,21 @@ async def check_and_pin_report(bot: Bot, chat_id: int) -> None:
 
 
 async def refresh_pinned_report(bot: Bot, chat_id: int) -> None:
-    report = await generate_report(chat_id)
+    task = _refresh_tasks.pop(chat_id, None)
+    if task:
+        task.cancel()
+    _refresh_tasks[chat_id] = asyncio.create_task(_refresh_after_delay(bot, chat_id))
+
+
+async def _refresh_after_delay(bot: Bot, chat_id: int) -> None:
+    await asyncio.sleep(3)
+    _refresh_tasks.pop(chat_id, None)
+
+    media = await generate_report_photo(chat_id)
     message_id = await get_today_message(chat_id)
 
     if not message_id:
-        await send_daily_report(bot, chat_id, report=report)
+        await send_daily_report(bot, chat_id, media=media)
         return
 
     needs_resend = False
@@ -73,14 +94,22 @@ async def refresh_pinned_report(bot: Bot, chat_id: int) -> None:
         pass
 
     if needs_resend:
-        await send_daily_report(bot, chat_id, report=report)
+        await send_daily_report(bot, chat_id, media=media)
         return
 
     try:
-        await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=report)
+        await bot.edit_message_media(
+            chat_id=chat_id,
+            message_id=message_id,
+            media=InputMediaPhoto(
+                media=BufferedInputFile(media[0], filename="report.png"),
+                caption=media[1],
+                parse_mode=ParseMode.HTML,
+            ),
+        )
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e).lower():
-            await send_daily_report(bot, chat_id, report=report)
+            await send_daily_report(bot, chat_id, media=media)
     except Exception:
         pass
 

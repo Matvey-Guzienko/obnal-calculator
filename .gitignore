@@ -7,13 +7,14 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
 # Secrets
 .env
 
 # Runtime data
 data/
+tg-data/
 
 # Local tooling / misc
 .vscode/

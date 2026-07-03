@@ -4,9 +4,11 @@ import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
-
-from config import BOT_TOKEN
+from aiogram.fsm.storage.memory import SimpleEventIsolation
+from config import BOT_TOKEN, TELEGRAM_API_URL
 from database import close_db, init_db
 from handlers import register_handlers
 from scheduler import build_scheduler, check_all_pinned_reports, run_daily_resets
@@ -15,11 +17,16 @@ from scheduler import build_scheduler, check_all_pinned_reports, run_daily_reset
 async def main() -> None:
     await init_db()
 
+    session = None
+    if TELEGRAM_API_URL:
+        session = AiohttpSession(api=TelegramAPIServer.from_base(TELEGRAM_API_URL))
+
     bot = Bot(
         token=BOT_TOKEN,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dp = Dispatcher()
+    dp = Dispatcher(events_isolation=SimpleEventIsolation())
     register_handlers(dp)
 
     await run_daily_resets(bot)

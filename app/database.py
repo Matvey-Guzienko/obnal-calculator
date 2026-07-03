@@ -112,6 +112,11 @@ async def get_course(chat_id: int, username: str) -> Optional[tuple[float, int]]
     return (row.course, row.percent) if row else None
 
 
+async def get_courses(chat_id: int) -> dict[str, tuple[float, int]]:
+    rows = await Setting.filter(chat_id=chat_id).only("username", "course", "percent")
+    return {row.username: (row.course, row.percent) for row in rows}
+
+
 async def add_transaction(
     chat_id: int, amount_rub: float, percent: int, course: float, username: str
 ) -> tuple[float, float]:
