@@ -1,3 +1,4 @@
+import logging
 import re
 
 from aiogram import Dispatcher, F
@@ -36,6 +37,8 @@ HELP_TEXT = """<b>Доступные команды:</b>
 TRANSACTION_RE = re.compile(r"^\+(\d+(?:[.,]\d+)?)\s+(.+)$")
 DELETE_TRANSACTION_RE = re.compile(r"^-(\d+(?:[.,]\d+)?)\s+(.+)$")
 
+logger = logging.getLogger(__name__)
+
 
 def register_handlers(dp: Dispatcher) -> None:
     dp.message.register(cmd_help, Command("help"))
@@ -44,6 +47,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.message.register(cmd_unpay, Command("unpay"))
     dp.message.register(handle_transaction, F.text.regexp(TRANSACTION_RE))
     dp.message.register(handle_delete_transaction, F.text.regexp(DELETE_TRANSACTION_RE))
+    dp.message.register(handle_unmatched_message)
 
 
 async def cmd_help(message: Message) -> None:
@@ -214,3 +218,12 @@ async def handle_delete_transaction(message: Message) -> None:
         await message.reply(
             f"Транзакция на {format_number(amount_rub)} ({username}) не найдена"
         )
+
+
+async def handle_unmatched_message(message: Message) -> None:
+    logger.info(
+        "Update id=%s not handled, chat=%s, text=%r",
+        message.message_id,
+        message.chat.id,
+        message.text or message.caption,
+    )
