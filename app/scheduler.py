@@ -3,7 +3,7 @@ import logging
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramMigrateToChat
 from aiogram.types import BufferedInputFile, InputMediaDocument
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -13,10 +13,12 @@ from config import DAILY_REPORT_HOUR, DAILY_REPORT_MINUTE, MOSCOW_TZ
 from database import (
     clear_daily_history,
     current_ledger_date,
+    delete_chat_data,
     get_known_chat_ids,
     get_last_daily_message_id,
     get_last_reset_date,
     get_today_message,
+    migrate_chat,
     save_daily_message,
     set_last_reset_date,
 )
@@ -40,11 +42,22 @@ async def send_daily_report(
         except Exception:
             pass
 
-    message = await bot.send_document(
-        chat_id=chat_id,
-        document=BufferedInputFile(media[0], filename="report.png"),
-        caption=media[1],
-    )
+    try:
+        message = await bot.send_document(
+            chat_id=chat_id,
+            document=BufferedInputFile(media[0], filename="report.png"),
+            caption=media[1],
+        )
+    except TelegramMigrateToChat as e:
+        await migrate_chat(chat_id, e.migrate_to_chat_id)
+        await send_daily_report(bot, e.migrate_to_chat_id, media=media)
+        return
+    except TelegramBadRequest as e:
+        if "chat not found" in str(e).lower():
+            await delete_chat_data(chat_id)
+            return
+        raise
+
     try:
         await bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
     except Exception:
@@ -58,6 +71,13 @@ async def check_and_pin_report(bot: Bot, chat_id: int) -> None:
     if message_id:
         try:
             chat = await bot.get_chat(chat_id)
+        except TelegramMigrateToChat as e:
+            await migrate_chat(chat_id, e.migrate_to_chat_id)
+            return
+        except TelegramBadRequest as e:
+            if "chat not found" in str(e).lower():
+                await delete_chat_data(chat_id)
+            return
         except Exception:
             return
         if chat.pinned_message and chat.pinned_message.message_id == message_id:
@@ -107,6 +127,9 @@ async def _refresh_after_delay(bot: Bot, chat_id: int) -> None:
                 parse_mode=ParseMode.HTML,
             ),
         )
+    except TelegramMigrateToChat as e:
+        await migrate_chat(chat_id, e.migrate_to_chat_id)
+        await send_daily_report(bot, e.migrate_to_chat_id, media=media)
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e).lower():
             await send_daily_report(bot, chat_id, media=media)

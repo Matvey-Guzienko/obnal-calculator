@@ -247,6 +247,16 @@ async def delete_last_payment(chat_id: int, amount_usdt: float, username: str) -
     return True
 
 
+async def migrate_chat(old_chat_id: int, new_chat_id: int) -> None:
+    for model in (Setting, Transaction, Payment, DailyMessage, ChatState):
+        await model.filter(chat_id=old_chat_id).update(chat_id=new_chat_id)
+
+
+async def delete_chat_data(chat_id: int) -> None:
+    for model in (Setting, Transaction, Payment, DailyMessage, ChatState):
+        await model.filter(chat_id=chat_id).delete()
+
+
 async def get_known_chat_ids() -> list[int]:
     ids: set[int] = set()
     for model in (Setting, Transaction, Payment, DailyMessage):
