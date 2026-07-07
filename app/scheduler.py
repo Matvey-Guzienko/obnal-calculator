@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import BufferedInputFile, InputMediaPhoto
+from aiogram.types import BufferedInputFile, InputMediaDocument
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -40,9 +40,9 @@ async def send_daily_report(
         except Exception:
             pass
 
-    message = await bot.send_photo(
+    message = await bot.send_document(
         chat_id=chat_id,
-        photo=BufferedInputFile(media[0], filename="report.png"),
+        document=BufferedInputFile(media[0], filename="report.png"),
         caption=media[1],
     )
     try:
@@ -101,7 +101,7 @@ async def _refresh_after_delay(bot: Bot, chat_id: int) -> None:
         await bot.edit_message_media(
             chat_id=chat_id,
             message_id=message_id,
-            media=InputMediaPhoto(
+            media=InputMediaDocument(
                 media=BufferedInputFile(media[0], filename="report.png"),
                 caption=media[1],
                 parse_mode=ParseMode.HTML,
